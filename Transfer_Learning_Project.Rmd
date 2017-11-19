@@ -16,8 +16,6 @@ library(SnowballC)
 In this section, we will read in all of the data, attach a category label for each data set, and combine all of these data.frames into a single data.frame. I also noticed that IDs are recycled within different categories, so I elected to make a concatenated id field composed of the id and category fields (concatenated with a pip character between them).
 ```{r}
 # read in data ======
-data_path <- '/Users/Avanti/Desktop/INDE-498/Project/'
-
 
 dat_bio <- read.csv('biology.csv', stringsAsFactors = F)
 dat_cook <- read.csv('cooking.csv', stringsAsFactors = F)
