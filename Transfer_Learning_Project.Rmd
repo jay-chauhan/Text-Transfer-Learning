@@ -1,0 +1,98 @@
+---
+title: "Transfer_Learning_Project"
+output: pdf_document
+---
+
+#Libraries
+
+```{r}
+library(data.table)
+library(ggplot2)
+library(tm)
+library(SnowballC)
+```
+#Read in Data and Process
+
+In this section, we will read in all of the data, attach a category label for each data set, and combine all of these data.frames into a single data.frame. I also noticed that IDs are recycled within different categories, so I elected to make a concatenated id field composed of the id and category fields (concatenated with a pip character between them).
+```{r}
+# read in data ======
+data_path <- '/Users/Avanti/Desktop/INDE-498/Project/'
+
+
+dat_bio <- read.csv('biology.csv', stringsAsFactors = F)
+dat_cook <- read.csv('cooking.csv', stringsAsFactors = F)
+dat_crypt <- read.csv('crypto.csv', stringsAsFactors = F)
+dat_diy <- read.csv('diy.csv', stringsAsFactors = F)
+dat_robot <- read.csv('robotics.csv', stringsAsFactors = F)
+dat_travel <- read.csv('travel.csv', stringsAsFactors = F)
+
+# attach a category label
+dat_bio$category <- 'biology'
+dat_cook$category <- 'cooking'
+dat_crypt$category <- 'crypto'
+dat_diy$category <- 'diy'
+dat_robot$category <- 'robotics'
+dat_travel$category <- 'travel'
+
+# combine and remove from environment
+dat_all <- rbind(dat_bio, dat_cook, dat_crypt, dat_diy, dat_robot, dat_travel)
+rm(dat_bio, dat_cook, dat_crypt, dat_diy, dat_robot, dat_travel)
+
+# duplicate id values across categories, concat id to category and we're good
+print(sum(duplicated(dat_all$id)))  # 27,441
+
+```
+
+#Checking heads of each file
+```{r}
+library(dplyr)
+unique(dat_all$category)
+```
+
+#Cleaning - Functions to Remove HTML tags and Punctutation
+```{r}
+# removes all html tags
+remove_html_tags <- function(htmlString) {
+    return(gsub("<.*?>", "", htmlString))
+}
+
+
+# custom tokenizer
+custom_tokenizer <- function(param_big_string) {
+    #' lower-cases, removes punctuation, new line and return characters, 
+    #' and removes unnecessary whitespace, then strsplits 
+    split_content <- sapply(param_big_string, removePunctuation, preserve_intra_word_dashes=T)
+    split_content <- sapply(split_content, function(y) gsub("[\r\n]", " ", y))
+    split_content <- sapply(split_content, tolower)
+    split_content <- sapply(split_content, function(y) gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", y, perl=TRUE))
+    
+    return(split_content)
+    #return(split_content <- (sapply(split_content, strsplit, " ")))
+}
+
+custom_preprocess<-function(text,stem=TRUE){
+  corpus <- Corpus(VectorSource(text))
+  docs <- tm_map(corpus, removeWords, stopwords("english"))
+  docs <- tm_map(docs, PlainTextDocument)
+  if(stem==TRUE){
+    docs <- tm_map(docs, stemDocument, "english")
+  }
+  return(docs$content)
+}
+```
+
+#Applying those functions on our combined dataframe
+
+```{r}
+# quick clean on content column
+dat_all$content <- remove_html_tags(dat_all$content)
+
+# tokenize
+dat_all$content <- custom_tokenizer(dat_all$content)
+dat_all$tags <- custom_tokenizer(dat_all$tags)
+dat_all$title <- custom_tokenizer(dat_all$title)
+
+dat_all$content<-custom_preprocess(dat_all$content)
+dat_all$tags<-custom_preprocess(dat_all$tags,FALSE)
+dat_all$title<-custom_preprocess(dat_all$title)
+```
