@@ -15,7 +15,7 @@ library(SnowballC)
 
 In this section, we will read in all of the data, attach a category label for each data set, and combine all of these data.frames into a single data.frame. I also noticed that IDs are recycled within different categories, so I elected to make a concatenated id field composed of the id and category fields (concatenated with a pip character between them).
 ```{r}
-# read in data ======
+# read in data
 
 dat_bio <- read.csv('biology.csv', stringsAsFactors = F)
 dat_cook <- read.csv('cooking.csv', stringsAsFactors = F)
@@ -114,18 +114,33 @@ dat_all$title_content =  paste(dat_all$title, dat_all$content, sep=" ")
 
 #Create a corupus of the title and content
 ```{r}
-title_content_corpus = Corpus(VectorSource(dat_all$title_content))
+ # removes all html tags
+ remove_html_tags <- function(htmlString) {
+     return(gsub("<.*?>", "", htmlString))
+ }
+```
+
+
+```{r}
+title_content_pre=remove_html_tags(dat_all$title_content)
+title_content_corpus = Corpus(VectorSource(title_content_pre))
 ```
 
 
 #Cleaning the Title and Content corpus. Removing Punctuation, Numbers and Extra Whitspaces.
 ```{r}
-title_content_corpus = tm_map(title_content_corpus, content_transformer(tolower))
-title_content_corpus = tm_map(title_content_corpus, removeNumbers)
-title_content_corpus = tm_map(title_content_corpus, removePunctuation)
-title_content_corpus = tm_map(title_content_corpus, removeWords, c("the", "and", stopwords("english")))
-title_content_corpus =  tm_map(title_content_corpus, stripWhitespace)
+title_content_corpus <- tm_map(title_content_corpus, content_transformer(tolower))
+title_content_corpus <- tm_map(title_content_corpus, removeNumbers)
+title_content_corpus <- tm_map(title_content_corpus, removePunctuation)
+title_content_corpus <- tm_map(title_content_corpus, removeWords, c("the", "and", stopwords("english")))
+title_content_corpus <-  tm_map(title_content_corpus, stripWhitespace)
+title_content_corpus<- tm_map(title_content_corpus, stemDocument, "english")
 ```
+
+```{r}
+head(title_content_corpus$content)
+```
+
 
 #Creating the Document Term Matrix for our corpus
 
@@ -143,10 +158,7 @@ inspect(title_content_dtm[500:505, 500:505])
 title_content_dtm = removeSparseTerms(title_content_dtm, 0.99)
 title_content_dtm
 ```
-#The first title content looks like the following
-```{r}
-inspect(title_content_dtm[1,1:20])
-```
+#The first title content looks like the followin
 
 
 ```{r}
@@ -165,7 +177,7 @@ title_content_dtm_tfidf
 
 ```{r}
 # The first document
-inspect(title_content_dtm_tfidf[1,1:20])
+inspect(title_content_dtm_tfidf[1,])
 ```
 
 ```{r}
@@ -182,36 +194,99 @@ dat_all_new = cbind(dat_all$tags, dat_all$category, as.matrix(title_content_dtm_
 
 ```{r}
 dat_all_new = data.frame(dat_all_new)
+#dat_all_new  %>% mutate_if(is.factor,as.numeric)
 ```
-
 
 #Wordclound for Tags
 
 ```{r}
 tag_corpus = Corpus(VectorSource(dat_all$tags))
 tag_corpus = tm_map(tag_corpus, content_transformer(tolower))
+tag_corpus = tm_map(tag_corpus, stripWhitespace)
 tag_corpus = tm_map(tag_corpus, removeNumbers)
 tag_corpus = tm_map(tag_corpus, removePunctuation)
-tag_corpus = tm_map(tag_corpus, removeWords, c("the", "and", stopwords("english")))
-tag_corpus =  tm_map(tag_corpus, stripWhitespace)
 ```
 
 ```{r}
-tag_dtm_tfidf <- DocumentTermMatrix(tag_corpus, control = list(weighting = weightTfIdf))
-tag_dtm_tfidf = removeSparseTerms(tag_dtm_tfidf, 0.99)
-tag_dtm_tfidf
+library(qdapTools)
+
+#extract tags from the corpus in df format
+tags<-tag_corpus$content
+
+#convert tags into one-hot encoding
+tags_ohe<-cbind(tags, mtabulate(strsplit(tags, " ")))
+
+tags_ohe %>% mutate_if(is.numeric,as.factor)
+
+#column bind the featureset and outputs to create final dataset
+dat_all_new<-cbind(dat_all_new,tags_ohe)
+```
+
+
+
+```{r}
+#select 15000 travel domain questions as test set and remaining as train
+dat_all_test<-tail(dat_all_new,15000)
+dat_all_train<-dat_all_new[1:(nrow(dat_all_new)-15000),]
+dim(dat_all_train)
+dat_all_train <- dat_all_train[ -c(1, 2,843 ) ]
+head(dat_all_train[1,841:850])
+
+#shuffle train data
+set.seed(1200)
+dat_all_train <- dat_all_train[sample(nrow(dat_all_train)),]
+
+dim(dat_all_train)
+```
+
+
+
+```{r}
+library(mlr)
+labels = colnames(dat_all_train)[841:845]
+multilabel.task = makeMultilabelTask(id = "multi", data = dat_all_train, target = labels)
+#yeast.task
+(labels)
+```
+
+
+```{r}
+lrn.rfsrc = makeLearner("multilabel.randomForestSRC")
+
+lrn.br = makeLearner("classif.rpart", predict.type = "prob")
+lrn.br = makeMultilabelBinaryRelevanceWrapper(lrn.br)
+mod = train(lrn.br, yeast.task)
+pred = predict(mod, task = yeast.task, subset = 1:10)
+
+performance(pred)
+
+getMultilabelBinaryPerformances(pred, measures = list(acc, mmce, auc))
+```
+
+
+```{r}
+# tag_dtm_tfidf <- DocumentTermMatrix(tag_corpus)
+# #tag_dtm_tfidf = removeSparseTerms(tag_dtm_tfidf, 0.99)
+# #tag_dtm_tfidf
 ```
 
 ```{r}
-freq = data.frame(sort(colSums(as.matrix(tag_dtm_tfidf)), decreasing=TRUE))
-wordcloud(rownames(freq), freq[,1], max.words=100, colors=brewer.pal(1, "Dark2"))
+# tag_dtm_tfidf$content
 ```
+
+```{r}
+# freq = data.frame(sort(colSums(as.matrix(tag_dtm_tfidf)), decreasing=TRUE))
+# wordcloud(rownames(freq), freq[,1], max.words=100, colors=brewer.pal(1, "Dark2"))
+```
+
+
+
 
 #Converting Tags to dummy variables for binary relevance
 ```{r}
-library(mlr)
-tags_df = dat_all$tags
-tags_df <- sapply(tags_df, function(x) { gsub('"','', x)})
-tags_df
+# library(mlr)
+# tags_df = dat_all$tags
+# tags_df <- sapply(tags_df, function(x) { gsub('"','', x)})
+# tags_df
 ```
 
