@@ -101,7 +101,7 @@ unique(dat_all$category)
 
 ```{r}
 #
-summary(dat_all)
+head(dat_all)
 ```
 
 ```{r}
@@ -188,12 +188,15 @@ wordcloud(rownames(freq), freq[,1], max.words=100, colors=brewer.pal(1, "Dark2")
 
 #Creating a dataframec combining the tf-idf frequencies with the tags
 ```{r}
-dat_all_new = cbind(dat_all$tags, dat_all$category, as.matrix(title_content_dtm_tfidf))
+dat_all_new = cbind(as.matrix(title_content_dtm_tfidf))
 ```
 
 
 ```{r}
 dat_all_new = data.frame(dat_all_new)
+dat_all_train<-dat_all_new[1:(nrow(dat_all_new)-15000),]
+dat_all_test<-tail(dat_all_new,15000)
+#head(dat_all_new)
 #dat_all_new  %>% mutate_if(is.factor,as.numeric)
 ```
 
@@ -204,33 +207,37 @@ tag_corpus = Corpus(VectorSource(dat_all$tags))
 tag_corpus = tm_map(tag_corpus, content_transformer(tolower))
 tag_corpus = tm_map(tag_corpus, stripWhitespace)
 tag_corpus = tm_map(tag_corpus, removeNumbers)
-tag_corpus = tm_map(tag_corpus, removePunctuation)
+tag_corpus = tm_map(tag_corpus, removePunctuation,preserve_intra_word_dashes=T)
 ```
 
 ```{r}
 library(qdapTools)
 
 #extract tags from the corpus in df format
-tags<-tag_corpus$content
+tags_train<-tag_corpus$content[1:(nrow(dat_all_new)-15000)]
+tags_test<-tail(tag_corpus$content,15000)
+head(tags_train)
 
 #convert tags into one-hot encoding
-tags_ohe<-cbind(tags, mtabulate(strsplit(tags, " ")))
+tags_train_ohef<-cbind(tags_train, mtabulate(strsplit(tags_train, " ")))
+tags_train_ohe <- data.frame(lapply(tags_train_ohef, as.logical))
 
-tags_ohe %>% mutate_if(is.numeric,as.factor)
+tags_test_ohef<-cbind(tags_test, mtabulate(strsplit(tags_test, " ")))
+tags_test_ohe <- data.frame(lapply(tags_test_ohef, as.logical))
 
 #column bind the featureset and outputs to create final dataset
-dat_all_new<-cbind(dat_all_new,tags_ohe)
+dat_all_train<-cbind(dat_all_train,tags_train_ohe)
+dat_all_test<-cbind(dat_all_test,tags_test_ohe)
 ```
 
 
 
 ```{r}
 #select 15000 travel domain questions as test set and remaining as train
-dat_all_test<-tail(dat_all_new,15000)
-dat_all_train<-dat_all_new[1:(nrow(dat_all_new)-15000),]
-dim(dat_all_train)
-dat_all_train <- dat_all_train[ -c(1, 2,843 ) ]
-head(dat_all_train[1,841:850])
+
+
+#dim(dat_all_train)
+dat_all_train <- dat_all_train[ -c(841 ) ]
 
 #shuffle train data
 set.seed(1200)
@@ -243,10 +250,9 @@ dim(dat_all_train)
 
 ```{r}
 library(mlr)
-labels = colnames(dat_all_train)[841:845]
+labels = colnames(dat_all_train[841:4555])
 multilabel.task = makeMultilabelTask(id = "multi", data = dat_all_train, target = labels)
 #yeast.task
-(labels)
 ```
 
 
@@ -255,8 +261,8 @@ lrn.rfsrc = makeLearner("multilabel.randomForestSRC")
 
 lrn.br = makeLearner("classif.rpart", predict.type = "prob")
 lrn.br = makeMultilabelBinaryRelevanceWrapper(lrn.br)
-mod = train(lrn.br, yeast.task)
-pred = predict(mod, task = yeast.task, subset = 1:10)
+mod = train(lrn.br, multilabel.task)
+pred = predict(mod, task = multilabel.task, subset = 1:10)
 
 performance(pred)
 
