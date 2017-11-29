@@ -277,10 +277,11 @@ set.seed(1200)
 dat_all_train <- dat_all_train[sample(nrow(dat_all_train)),]
 
 dim(dat_all_train)
+head(dat_all_train)[,841:857]
 ```
 
 ```{r}
-colnames(dat_all_test)
+dat_all_train['salt']
 ```
 
 
