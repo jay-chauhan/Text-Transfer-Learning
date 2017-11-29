@@ -231,6 +231,16 @@ dat_all_test<-cbind(dat_all_test,tags_test_ohe)
 ```
 
 
+```{r}
+xy_test<-cbind(category=dat_all$category[1:(nrow(dat_all_new)-15000)],tags_train_ohef)
+head(xy_test)
+aggregate(xy_test[,2:3717] ~ xy_test[,1], xy_test, sum)
+xy_test$tags_train<-NULL
+DT <- data.table(xy_test)
+xy<-DT[, lapply(.SD,sum), by=list(category)]
+which(colSums(xy != 0)>2)
+```
+
 
 ```{r}
 #select 15000 travel domain questions as test set and remaining as train
