@@ -108,7 +108,7 @@ head(dat_all)
 #Merging title and content and creating a corpus
 
 dat_all$title_content =  paste(dat_all$title, dat_all$content, sep=" ")
-
+head(dat_all)
 ```
 
 
@@ -189,6 +189,7 @@ wordcloud(rownames(freq), freq[,1], max.words=100, colors=brewer.pal(1, "Dark2")
 #Creating a dataframec combining the tf-idf frequencies with the tags
 ```{r}
 dat_all_new = cbind(as.matrix(title_content_dtm_tfidf))
+head(dat_all_new)
 ```
 
 
@@ -226,19 +227,41 @@ tags_test_ohef<-cbind(tags_test, mtabulate(strsplit(tags_test, " ")))
 tags_test_ohe <- data.frame(lapply(tags_test_ohef, as.logical))
 
 #column bind the featureset and outputs to create final dataset
-dat_all_train<-cbind(dat_all_train,tags_train_ohe)
-dat_all_test<-cbind(dat_all_test,tags_test_ohe)
+
+#dat_all_train<-cbind(dat_all_train,tags_train_ohe)
+#dat_all_test<-cbind(dat_all_test,tags_test_ohe)
 ```
 
 
 ```{r}
+# To select only those tags that appear in 2 or more categories
+
 xy_test<-cbind(category=dat_all$category[1:(nrow(dat_all_new)-15000)],tags_train_ohef)
-head(xy_test)
-aggregate(xy_test[,2:3717] ~ xy_test[,1], xy_test, sum)
+xy_test1 <- as.data.frame(xy_test)
+head(xy_test1)
+aggregate(.~ xy_test[, 1], xy_test, sum)
 xy_test$tags_train<-NULL
 DT <- data.table(xy_test)
 xy<-DT[, lapply(.SD,sum), by=list(category)]
-which(colSums(xy != 0)>2)
+hello <- which(colSums(xy != 0)> 2)
+hello <- as.data.frame(hello)
+#hello <- hello[2:nrow(hello),]
+hello <- rownames(hello)[2:nrow(hello)]
+hello
+```
+
+```{r}
+# Subsetting and keeping only the columns identified in the set above. Doesn't work on test, as column names are different for that. Thus commented out.
+
+tags_train_ohe <- tags_train_ohe[, (names(tags_train_ohe) %in% hello)]
+#tags_test_ohe <- tags_test_ohe[, (names(tags_test_ohe) %in% hello)]
+
+dat_all_train<-cbind(dat_all_train,tags_train_ohe)
+#dat_all_test<-cbind(dat_all_test,tags_test_ohe)
+```
+
+```{r}
+dat_all_train[, 841:857]
 ```
 
 
@@ -247,7 +270,7 @@ which(colSums(xy != 0)>2)
 
 
 #dim(dat_all_train)
-dat_all_train <- dat_all_train[ -c(841 ) ]
+#dat_all_train <- dat_all_train[ -c(841 ) ]
 
 #shuffle train data
 set.seed(1200)
@@ -256,11 +279,14 @@ dat_all_train <- dat_all_train[sample(nrow(dat_all_train)),]
 dim(dat_all_train)
 ```
 
+```{r}
+colnames(dat_all_test)
+```
 
 
 ```{r}
 library(mlr)
-labels = colnames(dat_all_train[841:4555])
+labels = colnames(dat_all_train[841:857])
 multilabel.task = makeMultilabelTask(id = "multi", data = dat_all_train, target = labels)
 #yeast.task
 ```
@@ -305,4 +331,13 @@ getMultilabelBinaryPerformances(pred, measures = list(acc, mmce, auc))
 # tags_df <- sapply(tags_df, function(x) { gsub('"','', x)})
 # tags_df
 ```
+
+
+
+
+
+
+
+
+
 
