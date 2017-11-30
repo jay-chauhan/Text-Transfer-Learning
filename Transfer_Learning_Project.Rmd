@@ -47,57 +47,6 @@ library(dplyr)
 unique(dat_all$category)
 ```
 
-#Cleaning - Functions to Remove HTML tags and Punctutation
-```{r}
-# 
-# # removes all html tags
-# remove_html_tags <- function(htmlString) {
-#     return(gsub("<.*?>", "", htmlString))
-# }
-# 
-# 
-# # custom tokenizer
-# custom_tokenizer <- function(param_big_string) {
-#     #' lower-cases, removes punctuation, new line and return characters, 
-#     #' and removes unnecessary whitespace, then strsplits 
-#     split_content <- sapply(param_big_string, removePunctuation, preserve_intra_word_dashes=T)
-#     split_content <- sapply(split_content, function(y) gsub("[\r\n]", " ", y))
-#     split_content <- sapply(split_content, tolower)
-#     split_content <- sapply(split_content, function(y) gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", y, perl=TRUE))
-#     
-#     return(split_content)
-#     #return(split_content <- (sapply(split_content, strsplit, " ")))
-# }
-# 
-# custom_preprocess<-function(text,stem=TRUE){
-#   corpus <- Corpus(VectorSource(text))
-#   docs <- tm_map(corpus, removeWords, stopwords("english"))
-#   docs <- tm_map(docs, PlainTextDocument)
-#   if(stem==TRUE){
-#     docs <- tm_map(docs, stemDocument, "english")
-#   }
-#   return(docs$content)
-# }
-
-```
-
-#Applying those functions on our combined dataframe
-
-```{r}
-# # quick clean on content column
-# dat_all$content <- remove_html_tags(dat_all$content)
-# 
-# # tokenize
-# dat_all$content <- custom_tokenizer(dat_all$content)
-# dat_all$tags <- custom_tokenizer(dat_all$tags)
-# dat_all$title <- custom_tokenizer(dat_all$title)
-# 
-# dat_all$content<-custom_preprocess(dat_all$content)
-# dat_all$tags<-custom_preprocess(dat_all$tags,FALSE)
-# dat_all$title<-custom_preprocess(dat_all$title)
-```
-
-
 
 ```{r}
 #
@@ -108,7 +57,7 @@ head(dat_all)
 #Merging title and content and creating a corpus
 
 dat_all$title_content =  paste(dat_all$title, dat_all$content, sep=" ")
-head(dat_all)
+colnames(dat_all)
 ```
 
 
@@ -142,34 +91,12 @@ head(title_content_corpus$content)
 ```
 
 
-#Creating the Document Term Matrix for our corpus
+#Removing sparse words
 
 ```{r}
-title_content_dtm <- DocumentTermMatrix(title_content_corpus)
-title_content_dtm
-```
-
-```{r}
-inspect(title_content_dtm[500:505, 500:505])
-```
-
-#To reduce the dimension of the DTM, we can emove the less frequent terms such that the sparsity is less than 0.99
-```{r}
-title_content_dtm = removeSparseTerms(title_content_dtm, 0.99)
-title_content_dtm
-```
-#The first title content looks like the followin
-
-
-```{r}
-library(wordcloud)
-freq = data.frame(sort(colSums(as.matrix(title_content_dtm)), decreasing=TRUE))
-wordcloud(rownames(freq), freq[,1], max.words=50, colors=brewer.pal(1, "Dark2"))
-```
 
 #One may argue that in the wordcloud, words such as can, need, know do not carry too much meaning in the setting, since we know that the entire corpus is about stack echange questions.  Therefore sometimes it is necessary to use the tf–idf(term frequency–inverse document frequency) instead of the frequencies of the term as entries, tf-idf measures the relative importance of a word to a document.
 
-```{r}
 title_content_dtm_tfidf <- DocumentTermMatrix(title_content_corpus, control = list(weighting = weightTfIdf))
 title_content_dtm_tfidf = removeSparseTerms(title_content_dtm_tfidf, 0.99)
 title_content_dtm_tfidf
@@ -181,6 +108,7 @@ inspect(title_content_dtm_tfidf[1,])
 ```
 
 ```{r}
+library(wordcloud)
 freq = data.frame(sort(colSums(as.matrix(title_content_dtm_tfidf)), decreasing=TRUE))
 wordcloud(rownames(freq), freq[,1], max.words=100, colors=brewer.pal(1, "Dark2"))
 ```
@@ -189,19 +117,17 @@ wordcloud(rownames(freq), freq[,1], max.words=100, colors=brewer.pal(1, "Dark2")
 #Creating a dataframec combining the tf-idf frequencies with the tags
 ```{r}
 dat_all_new = cbind(as.matrix(title_content_dtm_tfidf))
-head(dat_all_new)
 ```
 
 
 ```{r}
 dat_all_new = data.frame(dat_all_new)
-dat_all_train<-dat_all_new[1:(nrow(dat_all_new)-15000),]
-dat_all_test<-tail(dat_all_new,15000)
-#head(dat_all_new)
-#dat_all_new  %>% mutate_if(is.factor,as.numeric)
+dim(dat_all_new)
+dat_all_new  %>% mutate_if(is.factor,as.numeric)
 ```
 
-#Wordclound for Tags
+#Working with Tags. 
+1. Creating Tag Corpus and processing text
 
 ```{r}
 tag_corpus = Corpus(VectorSource(dat_all$tags))
@@ -211,134 +137,195 @@ tag_corpus = tm_map(tag_corpus, removeNumbers)
 tag_corpus = tm_map(tag_corpus, removePunctuation,preserve_intra_word_dashes=T)
 ```
 
+
+
 ```{r}
 library(qdapTools)
 
 #extract tags from the corpus in df format
-tags_train<-tag_corpus$content[1:(nrow(dat_all_new)-15000)]
-tags_test<-tail(tag_corpus$content,15000)
-head(tags_train)
+tags_all = (tag_corpus$content[1:(nrow(dat_all_new))])
+head(tags_all)
 
 #convert tags into one-hot encoding
-tags_train_ohef<-cbind(tags_train, mtabulate(strsplit(tags_train, " ")))
-tags_train_ohe <- data.frame(lapply(tags_train_ohef, as.logical))
+tags_binary = cbind(tags_all, mtabulate(strsplit((tags_all), " ")))
 
-tags_test_ohef<-cbind(tags_test, mtabulate(strsplit(tags_test, " ")))
-tags_test_ohe <- data.frame(lapply(tags_test_ohef, as.logical))
+#tags_test_ohef<-cbind(tags_test, mtabulate(strsplit(tags_test, " ")))
+#tags_test_ohe <- data.frame(lapply(tags_test_ohef, as.logical))
 
 #column bind the featureset and outputs to create final dataset
-
-#dat_all_train<-cbind(dat_all_train,tags_train_ohe)
-#dat_all_test<-cbind(dat_all_test,tags_test_ohe)
+dat_all_feature_df <-cbind(dat_all_new,tags_binary)
+dim(dat_all_feature_df)
 ```
 
 
 ```{r}
 # To select only those tags that appear in 2 or more categories
 
-xy_test<-cbind(category=dat_all$category[1:(nrow(dat_all_new)-15000)],tags_train_ohef)
-xy_test1 <- as.data.frame(xy_test)
-head(xy_test1)
-aggregate(.~ xy_test[, 1], xy_test, sum)
-xy_test$tags_train<-NULL
-DT <- data.table(xy_test)
-xy<-DT[, lapply(.SD,sum), by=list(category)]
-hello <- which(colSums(xy != 0)> 2)
-hello <- as.data.frame(hello)
+#1. Appending Tags to the actual Dataframe
+cat_tag_df = data.frame(cbind(category = dat_all$category, tags_binary))
+#Removing tags_all column
+cat_tag_df$tags_all = NULL
+dim(cat_tag_df)
+
+aggregate(.~ cat_tag_df[, 1], cat_tag_df, sum)
+#xy_test$tags_train<-NULL
+cat_tag_dt <- data.table(cat_tag_df)
+dim(cat_tag_dt)
+
+#Grouping by Category
+cat_tag_by_catogory <-cat_tag_dt[, lapply(.SD,sum), by=list(category)]
+head(cat_tag_by_catogory)
+
+#Filtering Tags which appear in more than 2 categories
+more_than_2_cat_tags <- which(colSums(cat_tag_by_catogory != 0)> 2)
+more_than_2_cat_tags
+more_than_2_cat_tags_df <- as.data.frame(more_than_2_cat_tags)
+dim(more_than_2_cat_tags_df)
 #hello <- hello[2:nrow(hello),]
-hello <- rownames(hello)[2:nrow(hello)]
-hello
+more_than_2_cat_tags_df <- rownames(more_than_2_cat_tags_df)[2:nrow(more_than_2_cat_tags_df)]
+
+#Removing untagged from list
+more_than_2_cat_tags_list <- more_than_2_cat_tags_df[more_than_2_cat_tags_df != "untagged"]
+more_than_2_cat_tags_list <- more_than_2_cat_tags_df[more_than_2_cat_tags_df != "salt"]
+length(more_than_2_cat_tags_list)
+more_than_2_cat_tags_list
 ```
 
+#Filtering DataFrame with only these tags 
 ```{r}
-# Subsetting and keeping only the columns identified in the set above. Doesn't work on test, as column names are different for that. Thus commented out.
+# Subsetting and keeping only the tag columns identified in the set above.
+tags_binary <- tags_binary[, (names(tags_binary)) %in% more_than_2_cat_tags_list]
 
-tags_train_ohe <- tags_train_ohe[, (names(tags_train_ohe) %in% hello)]
-#tags_test_ohe <- tags_test_ohe[, (names(tags_test_ohe) %in% hello)]
-
-dat_all_train<-cbind(dat_all_train,tags_train_ohe)
-#dat_all_test<-cbind(dat_all_test,tags_test_ohe)
+dat_all_feature_new_df <-cbind(dat_all_new,tags_binary)
 ```
 
+#Splitting Data into Train and Test
 ```{r}
-dat_all_train[, 841:857]
-```
-
-
-```{r}
-#select 15000 travel domain questions as test set and remaining as train
-
-
-#dim(dat_all_train)
-#dat_all_train <- dat_all_train[ -c(841 ) ]
-
-#shuffle train data
-set.seed(1200)
-dat_all_train <- dat_all_train[sample(nrow(dat_all_train)),]
-
+#Training Set
+dat_all_train = dat_all_feature_new_df[1:(nrow(dat_all_feature_new_df)-15000),]
 dim(dat_all_train)
-head(dat_all_train)[,841:857]
+dat_x_train = dat_all_train[, -c(841:856)]
+dim(dat_x_train)
+head(dat_x_train)
+dat_y_train = dat_all_train[, 841:856]
+dim(dat_y_train)
+head(dat_y_train)
 ```
 
+
+
 ```{r}
-dat_all_train['salt']
+#Test Set
+dat_all_test<-tail(dat_all_feature_new_df,15000)
+dim(dat_all_test)
+dat_x_test = dat_all_test[, -c(841:856)]
+dim(dat_x_test)
+head(dat_x_train)
+dat_y_test = dat_all_test[, 841:856]
+dim(dat_y_test)
+head(dat_y_test)
+```
+#Preparing Data For mlr
+```{r}
+#Combining Train and test data
+data_all = rbind(dat_x_train, dat_x_test)
+target_all = rbind(dat_y_train, dat_y_test)
+
+#Target should be encoded as logical. 
+target_all <- data.frame(lapply(target_all, as.logical))
+head(target_all)
 ```
 
+#Creating an MLR Task
+
 
 ```{r}
+set.seed(1729)
 library(mlr)
-labels = colnames(dat_all_train[841:857])
-multilabel.task = makeMultilabelTask(id = "multi", data = dat_all_train, target = labels)
-#yeast.task
+labels = c()
+for (i in (1:length(colnames(target_all)))){
+  labels[i] = (paste0("label",i))
+}
+
+features = c()
+for (i in (1:length(colnames(data_all)))){
+  features[i] = (paste0("x",i))
+}
+
+
+colnames(data_all) = features
+colnames(target_all) = labels
+
+#Data with Target
+dat_all_with_target = cbind(data_all,target_all)
+
+#Creating Task
+tags.task = makeMultilabelTask(data = dat_all_with_target, target = labels)
+
 ```
 
 
+#Creating a Binary Learner - Classifier Chains
 ```{r}
-lrn.rfsrc = makeLearner("multilabel.randomForestSRC")
+binary.learner = makeLearner("classif.rpart")
+lrncc = makeMultilabelClassifierChainsWrapper(binary.learner)
+```
 
+#Train and Predict
+```{r}
+n = getTaskSize(tags.task)
+n
+train.set = 1:72000
+test.set = 72000:87000
+```
+
+
+
+```{r}
+tags.mod.cc = train(lrncc, tags.task, subset = train.set)
+tags.pred.cc = predict(tags.mod.cc, task = tags.task, subset = test.set)
+```
+
+#Performance
+```{r}
+performance(tags.pred.cc, measures = list(multilabel.hamloss, multilabel.subset01, multilabel.f1, multilabel.acc))
+```
+
+
+
+```{r}
+getMultilabelBinaryPerformances(tags.pred.cc, measures = list(acc, mmce))
+```
+
+#Binary Relevance
+```{r}
 lrn.br = makeLearner("classif.rpart", predict.type = "prob")
 lrn.br = makeMultilabelBinaryRelevanceWrapper(lrn.br)
-mod = train(lrn.br, multilabel.task)
-pred = predict(mod, task = multilabel.task, subset = 1:10)
-
-performance(pred)
-
-getMultilabelBinaryPerformances(pred, measures = list(acc, mmce, auc))
+lrn.br
 ```
 
 
 ```{r}
-# tag_dtm_tfidf <- DocumentTermMatrix(tag_corpus)
-# #tag_dtm_tfidf = removeSparseTerms(tag_dtm_tfidf, 0.99)
-# #tag_dtm_tfidf
+tags.mod.br = train(lrn.br, tags.task, subset = train.set)
+tags.pred.br = predict(tags.mod.br, task = tags.task, subset = test.set)
+```
+
+
+
+```{r}
+getMultilabelBinaryPerformances(tags.pred.br, measures = list(acc, mmce))
 ```
 
 ```{r}
-# tag_dtm_tfidf$content
+predictions_df = data.frame(tags.pred.br)
+colnames(predictions_df) = colnames(target_all)
+head(predictions_df)
+predictions_df %>% filter(response.label16 == TRUE)
+
+#2, 9 - Children and Safety
 ```
 
 ```{r}
-# freq = data.frame(sort(colSums(as.matrix(tag_dtm_tfidf)), decreasing=TRUE))
-# wordcloud(rownames(freq), freq[,1], max.words=100, colors=brewer.pal(1, "Dark2"))
+colnames(dat_y_test)
 ```
-
-
-
-
-#Converting Tags to dummy variables for binary relevance
-```{r}
-# library(mlr)
-# tags_df = dat_all$tags
-# tags_df <- sapply(tags_df, function(x) { gsub('"','', x)})
-# tags_df
-```
-
-
-
-
-
-
-
-
-
 
