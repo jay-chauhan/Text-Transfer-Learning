@@ -17,12 +17,12 @@ In this section, we will read in all of the data, attach a category label for ea
 ```{r}
 # read in data
 
-dat_bio <- read.csv('biology.csv', stringsAsFactors = F)
-dat_cook <- read.csv('cooking.csv', stringsAsFactors = F)
-dat_crypt <- read.csv('crypto.csv', stringsAsFactors = F)
-dat_diy <- read.csv('diy.csv', stringsAsFactors = F)
-dat_robot <- read.csv('robotics.csv', stringsAsFactors = F)
-dat_travel <- read.csv('travel.csv', stringsAsFactors = F)
+dat_bio <- read.csv('biology.csv',nrows = 2000, stringsAsFactors = F)
+dat_cook <- read.csv('cooking.csv' ,nrows = 2000, stringsAsFactors = F)
+dat_crypt <- read.csv('crypto.csv',nrows = 2000,  stringsAsFactors = F)
+dat_diy <- read.csv('diy.csv',nrows = 2000, stringsAsFactors = F)
+dat_robot <- read.csv('robotics.csv',nrows = 2000, stringsAsFactors = F)
+dat_travel <- read.csv('travel.csv',nrows = 2000, stringsAsFactors = F)
 
 # attach a category label
 dat_bio$category <- 'biology'
@@ -50,14 +50,13 @@ unique(dat_all$category)
 
 ```{r}
 #
-head(dat_all)
+dim(dat_all)
 ```
 
 ```{r}
 #Merging title and content and creating a corpus
 
 dat_all$title_content =  paste(dat_all$title, dat_all$content, sep=" ")
-colnames(dat_all)
 ```
 
 
@@ -148,13 +147,12 @@ head(tags_all)
 
 #convert tags into one-hot encoding
 tags_binary = cbind(tags_all, mtabulate(strsplit((tags_all), " ")))
-
 #tags_test_ohef<-cbind(tags_test, mtabulate(strsplit(tags_test, " ")))
 #tags_test_ohe <- data.frame(lapply(tags_test_ohef, as.logical))
 
 #column bind the featureset and outputs to create final dataset
 dat_all_feature_df <-cbind(dat_all_new,tags_binary)
-dim(dat_all_feature_df)
+dim(tags_binary)
 ```
 
 
@@ -165,7 +163,7 @@ dim(dat_all_feature_df)
 cat_tag_df = data.frame(cbind(category = dat_all$category, tags_binary))
 #Removing tags_all column
 cat_tag_df$tags_all = NULL
-dim(cat_tag_df)
+tail(dat_all$category)
 
 aggregate(.~ cat_tag_df[, 1], cat_tag_df, sum)
 #xy_test$tags_train<-NULL
@@ -174,40 +172,41 @@ dim(cat_tag_dt)
 
 #Grouping by Category
 cat_tag_by_catogory <-cat_tag_dt[, lapply(.SD,sum), by=list(category)]
-head(cat_tag_by_catogory)
+dim(cat_tag_by_catogory)
 
 #Filtering Tags which appear in more than 2 categories
 more_than_2_cat_tags <- which(colSums(cat_tag_by_catogory != 0)> 2)
-more_than_2_cat_tags
-more_than_2_cat_tags_df <- as.data.frame(more_than_2_cat_tags)
-dim(more_than_2_cat_tags_df)
+#more_than_2_cat_tags <- c(more_than_2_cat_tags,which((colSums(cat_tag_by_catogory != 0)> 1) & (colSums(cat_tag_by_catogory[1:5,2:2030])> 15)))
+
+more_than_2_cat_tags_df<-names(more_than_2_cat_tags)
+#more_than_2_cat_tags_df <- as.data.frame(more_than_2_cat_tags)
+length(more_than_2_cat_tags_df)
 #hello <- hello[2:nrow(hello),]
-more_than_2_cat_tags_df <- rownames(more_than_2_cat_tags_df)[2:nrow(more_than_2_cat_tags_df)]
+#more_than_2_cat_tags_df <- rownames(more_than_2_cat_tags_df)[2:nrow(more_than_2_cat_tags_df)]
 
 #Removing untagged from list
 more_than_2_cat_tags_list <- more_than_2_cat_tags_df[more_than_2_cat_tags_df != "untagged"]
 more_than_2_cat_tags_list <- more_than_2_cat_tags_df[more_than_2_cat_tags_df != "salt"]
 length(more_than_2_cat_tags_list)
-more_than_2_cat_tags_list
 ```
 
 #Filtering DataFrame with only these tags 
 ```{r}
 # Subsetting and keeping only the tag columns identified in the set above.
 tags_binary <- tags_binary[, (names(tags_binary)) %in% more_than_2_cat_tags_list]
-
 dat_all_feature_new_df <-cbind(dat_all_new,tags_binary)
+dim(dat_all_feature_new_df)
 ```
 
 #Splitting Data into Train and Test
 ```{r}
 #Training Set
-dat_all_train = dat_all_feature_new_df[1:(nrow(dat_all_feature_new_df)-15000),]
+dat_all_train = dat_all_feature_new_df[1:(nrow(dat_all_feature_new_df)-11000),]
 dim(dat_all_train)
-dat_x_train = dat_all_train[, -c(841:856)]
+dat_x_train = dat_all_train[, -c(838:905)]
 dim(dat_x_train)
 head(dat_x_train)
-dat_y_train = dat_all_train[, 841:856]
+dat_y_train = dat_all_train[, 838:905]
 dim(dat_y_train)
 head(dat_y_train)
 ```
@@ -216,12 +215,12 @@ head(dat_y_train)
 
 ```{r}
 #Test Set
-dat_all_test<-tail(dat_all_feature_new_df,15000)
+dat_all_test<-tail(dat_all_feature_new_df,11000)
 dim(dat_all_test)
-dat_x_test = dat_all_test[, -c(841:856)]
+dat_x_test = dat_all_test[, -c(838:905)]
 dim(dat_x_test)
 head(dat_x_train)
-dat_y_test = dat_all_test[, 841:856]
+dat_y_test = dat_all_test[, 838:905]
 dim(dat_y_test)
 head(dat_y_test)
 ```
@@ -230,6 +229,7 @@ head(dat_y_test)
 #Combining Train and test data
 data_all = rbind(dat_x_train, dat_x_test)
 target_all = rbind(dat_y_train, dat_y_test)
+
 
 #Target should be encoded as logical. 
 target_all <- data.frame(lapply(target_all, as.logical))
@@ -240,7 +240,7 @@ head(target_all)
 
 
 ```{r}
-set.seed(1729)
+
 library(mlr)
 labels = c()
 for (i in (1:length(colnames(target_all)))){
@@ -252,7 +252,6 @@ for (i in (1:length(colnames(data_all)))){
   features[i] = (paste0("x",i))
 }
 
-
 colnames(data_all) = features
 colnames(target_all) = labels
 
@@ -261,7 +260,6 @@ dat_all_with_target = cbind(data_all,target_all)
 
 #Creating Task
 tags.task = makeMultilabelTask(data = dat_all_with_target, target = labels)
-
 ```
 
 
@@ -275,8 +273,8 @@ lrncc = makeMultilabelClassifierChainsWrapper(binary.learner)
 ```{r}
 n = getTaskSize(tags.task)
 n
-train.set = 1:72000
-test.set = 72000:87000
+train.set = 1:11000
+test.set = 11001:12000
 ```
 
 
@@ -328,4 +326,8 @@ predictions_df %>% filter(response.label16 == TRUE)
 ```{r}
 colnames(dat_y_test)
 ```
+```{r}
 
+
+
+```
